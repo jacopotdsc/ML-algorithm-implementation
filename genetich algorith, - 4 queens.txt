@@ -1,0 +1,254 @@
+safe([]).
+safe(QueensList) :-
+    fitness(QueensList, FitnessValue),
+    
+    % per imporre che la disposizione è quella giusta
+    FitnessValue == 0.
+
+% mi restituisce il valore della fitnes: totale collisioni tra regine
+fitness(QueensList, NewFitnessValue) :-
+    fitnessFunction(QueensList, FitnessValue),
+    (isTheSame(QueensList) ->  NewFitnessValue is FitnessValue - 3;
+    someAreSame(QueensList) -> NewFitnessValue is FitnessValue - 1;
+    NewFitnessValue is FitnessValue).
+    
+fitnessFunction([],0).
+fitnessFunction([Queen|OtherQueens], TotalCollision) :-
+    collisionNumber(Queen, OtherQueens, 1, CollisionsInL),
+    fitnessFunction(OtherQueens, OtherCollisions),
+    TotalCollision is OtherCollisions + CollisionsInL.
+
+isTheSame(Queens) :-
+    list_to_set(Queens, List),
+    proper_length(List, Len),
+    Len == 1.
+
+somaAreSame([]).
+someAreSame(Queens) :-
+    list_to_set(Queens, List),
+    proper_length(List, Len),
+    Len == 2.
+
+%someAreSame([_Queens|OtherQueens]) :-
+ %   someAreSame(OtherQueens).
+
+collisionNumber(_, [] , _, 0).
+collisionNumber(Queen, [CompareQueen|OtherQueens], X, TotCol) :-
+    
+    %gli indici delle queen sono le loro Y
+    % distanza sull'asse Y delle regine, X è la distanza sull'asse X
+    Y is abs(CompareQueen-Queen),
+    
+   
+    (Y == X ->  C1 = 1;	 						 % stanno sulla diagonale
+    Y =\= X, Queen ==  CompareQueen ->  C1 = 1;  % vedo se stanno in orizzontale
+    Y =\= X, Queen =\= CompareQueen ->  C1 = 0), % else non ci sono collisioni 
+    
+    NewX is X + 1,
+    collisionNumber(Queen, OtherQueens, NewX, C2),
+    TotCol is C1+C2.
+
+subst(This, That, MyStr, Result) :-
+    append(This, After, Rest),
+    append(Before, Rest, MyStr),
+    !,
+    subst(This, That, After, AfterResult),
+    append([Before,That,AfterResult], Result).
+subst(_, _, S, S).
+
+
+%%%%%%%%%% evaluation %%%%%%%%%%
+
+evaluation([Y|_Ys],Sol) :- 
+    safe(Y), 
+    Sol = Y.
+
+evaluation([_Y|Ys],Sol) :- % la lista [Y|Ys] è una lista di liste
+    Ys \= [],
+    evaluation(Ys,Sol).
+
+%%%%%%%%%% evaluation %%%%%%%%%%
+
+
+
+%%%%%%%%%% selection %%%%%%%%%%
+
+% seleziona una lista random Result e restituisce resto della lista RestOfList
+randomList(L,Result, RestOfList) :-
+    proper_length(L,Len),
+    random_between(1, Len , Index),
+    
+    %p prende l'i-esimo ( Index ) item e lo mette in result
+    nth1(Index,L,Result,RestOfList).
+
+% trova il valore massimo della fitness
+maxFitnessList([],[]).
+
+maxFitnessList([Q|Qs], [F|Fs]) :-
+    maxFitnessList(Qs,Fs),
+    fitnessFunction(Q,F).
+
+maxFitnessList([Q|_Qs], [F|_Fs]) :-
+    fitnessFunction(Q,F).
+
+% restituisce l'indice in cui si trova il valore massimo
+findIndex([F|_Fs], MaxValue, Index, Res) :-
+    F == MaxValue,
+    Res = Index.
+
+findIndex([_F|Fs], MaxValue, Index, Res) :-
+	findIndex(Fs, MaxValue, Index + 1, Res).
+
+    
+% seleziona le coppie di genitori
+selection(MyList, ListParent1, ListParent2) :-
+    
+    % estrapolo il primo con la fitness più alta
+    maxFitnessList(MyList, FitnessList),
+    max_member(MaxValue, FitnessList),
+    nth1(IndexForMaxFitness, FitnessList , MaxValue),	% trova l'indice per cui c'è MaxValue in FitnessList 
+    AdjustedIndex is IndexForMaxFitness - 1,	% aggiusto l'indice perchè deve contare da 0
+    nth0(AdjustedIndex, MyList, P1),		% mi estrapola la lista con la Fitness più grande
+    
+    %cancello dalla lista quello con la fitness più alta
+    delete(MyList, P1, NewList),
+    
+    %estrapolo il secondo con la fitness più alta
+    maxFitnessList(NewList, NewFitnessList),
+    max_member(NewMaxValue, NewFitnessList),
+    nth1(NewIndexForMaxFitness, NewFitnessList, NewMaxValue),
+    NewAdjustedIndex is NewIndexForMaxFitness - 1,
+    nth0(NewAdjustedIndex, NewList, P2, ListParent2),
+    
+    % formo l'altra lista
+    ListParent1 = [P1|[P2]].
+
+%%%%%%%%%% selection %%%%%%%%%%
+
+
+
+
+%%%%%%%%%% crossover %%%%%%%%%%
+    
+% spezza la lista formando L1 con Length = Index
+divideList(L, 0, AuxL1, L1, L2) :-
+    append(AuxL1, [], L1), %L1 = AuxL1,
+    append(L, [], L2).	   %L2 = L.
+
+divideList([L|Ls], Index, AuxL1, L1, L2) :-
+    Index > 0,
+    append(AuxL1, [L], NewAuxL1),
+
+    NewIndex is Index - 1,
+    divideList(Ls, NewIndex, NewAuxL1, L1, L2).
+
+
+
+crossover([P1,P2], Result ) :-
+    
+    %spezzo le liste in due sottoliste
+    divideList(P1, 2, _, _P1L1, P1L2),
+    divideList(P2, 2, _, _P2L1, P2L2),
+
+    %append(P1L1,P2L2, NewP1),
+    %append(P2L1,P1L2, NewP2),
+    subst(P1L2, P2L2, P1, NewP1),
+    subst(P2L2, P1L2, P2, NewP2),
+
+    append([NewP1], [], Aux),
+    append([NewP2], Aux, Result).
+
+%myCrossover1(L, P1, P2, Result) :-
+
+
+%crossover([], _).
+%crossover([L|Ls], [Y|Ys]) :-
+ %   myCrossover(L, _, _, Y),
+  %  crossover(Ls,Ys).
+
+%%%%%%%%%% crossover %%%%%%%%%%
+
+
+
+
+%%%%%%%%%% mutation %%%%%%%%%%
+
+exchange([L|Ls], Index, NewList, Result ) :- 
+    Index > 1,
+    NewIndex = Index - 1,
+    append(NewList, [L], FinalList),
+    exchange(Ls, NewIndex, FinalList , Result ).
+
+exchange([_L|Ls], _ , Aux, Result) :-
+    % genero numero da mettere casualmente
+    random_between(1,4,NewNumber),
+    append(Aux,[NewNumber], MyAux), 
+    append(MyAux, Ls , Result).
+  
+
+mutation([L1,L2], [NewL1, NewL2]) :-
+    %length(L1, Len1),
+    random_between(1,4, Index1),
+	
+    %muto l'i-esimo ( index ) numero
+    exchange(L1, Index1, [], NewL1),
+    
+    %length(L2, Len2),
+    random_between(1,4, Index2),
+	
+    %muto l'i-esimo ( index ) numero
+    exchange(L2, Index2, [], NewL2).
+    
+
+%%%%%%%%%% mutation %%%%%%%%%%
+
+main(Y,Sol) :- 
+    evaluation(Y,Sol).
+
+main(List,Sol) :-
+    % seleziono le coppie di genitori
+    selection(List, ListParent1, ListParent2),
+    
+    % le incrocio
+    crossover(ListParent1, NewListParent1 ),
+    crossover(ListParent2, NewListParent2 ),
+    
+    % faccio avvenire la mutation
+ 	mutation(NewListParent1, MutationListParent1),
+    mutation(NewListParent2, MutationListParent2),
+    
+    % li rimetto in una nuova lista
+    append(MutationListParent1, [], Aux),
+    append(MutationListParent2, Aux, NewList),
+    
+    % faccio un'altra iterazione
+    main(NewList ,Sol).
+
+initializePopulation(Population) :-
+    % creo randomicamente la popolazione iniziale
+    createRandomList1(4,[],L1),
+    createRandomList1(4,[],L2),
+    createRandomList1(4,[],L3),
+    createRandomList1(4,[],L4),
+    
+    % li unisco in una sola lista
+    append([], [L1], Aux1),
+    append(Aux1, [L2], Aux2),
+    append(Aux2, [L3], Aux3),
+    append(Aux3, [L4], Population).
+
+queens(Sol) :- 
+    initializePopulation(Y),
+    %Y = [[2,2,2,2], [2,4,3,3], [3,1,2,4], [4,3,2,1]], 
+    main(Y,Sol).
+
+
+createRandomList1(Len, Res, FinalList) :-
+    Len > 0,
+    random_between(1,4,N),
+	append(Res,[N],NewRes),
+    NewLen is Len-1,
+    createRandomList1(NewLen, NewRes ,FinalList).
+
+createRandomList1(0, Res, FinalList) :-
+	append(Res,[], FinalList).
